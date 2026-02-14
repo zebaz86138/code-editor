@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Code Editor</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <!-- Monaco Editor -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.44.0/min/vs/editor/editor.main.min.css">
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+    <div class="app-container">
+        <!-- Верхняя панель -->
+        <div class="top-bar">
+            <div class="logo">
+                <i class="fas fa-code"></i>
+                <span>AI Code Editor</span>
+            </div>
+            <div class="file-info">
+                <span id="current-file">Новый файл</span>
+                <span id="modified-indicator" style="display: none;">●</span>
+            </div>
+            <div class="top-buttons">
+                <button class="btn btn-icon" onclick="newFile()" title="Новый файл">
+                    <i class="fas fa-file"></i>
+                </button>
+                <button class="btn btn-icon" onclick="openFileDialog()" title="Открыть файл">
+                    <i class="fas fa-folder-open"></i>
+                </button>
+                <button class="btn btn-icon" onclick="saveFile()" title="Сохранить (Ctrl+S)">
+                    <i class="fas fa-save"></i>
+                </button>
+                <button class="btn btn-icon btn-success" onclick="runCode()" title="Запустить (F5)">
+                    <i class="fas fa-play"></i>
+                </button>
+                <button class="btn btn-icon" onclick="openSettings()" title="Настройки">
+                    <i class="fas fa-cog"></i>
+                </button>
+            </div>
+        </div>
+
+        <!-- Основной контейнер -->
+        <div class="main-container">
+            <!-- Левая панель - Файлы -->
+            <div class="left-panel panel">
+                <div class="panel-header">
+                    <span><i class="fas fa-folder-tree"></i> Файлы</span>
+                    <div>
+                        <button class="btn btn-sm btn-icon" onclick="openDirectoryDialog()" title="Открыть папку">
+                            <i class="fas fa-folder-open"></i>
+                        </button>
+                        <button class="btn btn-sm btn-icon" onclick="refreshFileTree()" title="Обновить">
+                            <i class="fas fa-sync"></i>
+                        </button>
+                    </div>
+                </div>
+                <div class="panel-content">
+                    <div id="file-tree" class="file-tree">
+                        <div class="empty-state">
+                            <i class="fas fa-folder-open fa-3x"></i>
+                            <p>Откройте папку проекта</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Центральная панель - Редактор -->
+            <div class="center-panel panel">
+                <div class="panel-header">
+                    <span><i class="fas fa-code"></i> Редактор</span>
+                    <div class="editor-controls">
+                        <select id="language-select" onchange="changeLanguage()">
+                            <option value="python">Python</option>
+                            <option value="javascript">JavaScript</option>
+                            <option value="html">HTML</option>
+                            <option value="css">CSS</option>
+                            <option value="json">JSON</option>
+                        </select>
+                        <button class="btn btn-sm btn-icon" onclick="toggleTheme()" title="Сменить тему">
+                            <i class="fas fa-adjust"></i>
+                        </button>
+                    </div>
+                </div>
+                <div class="panel-content">
+                    <div id="editor-container"></div>
+                </div>
+            </div>
+
+            <!-- Правая панель - AI Chat -->
+            <div class="right-panel panel">
+                <div class="panel-header">
+                    <span><i class="fas fa-robot"></i> AI Ассистент</span>
+                    <div>
+                        <button class="btn btn-sm btn-icon" onclick="clearChat()" title="Очистить чат">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                    </div>
+                </div>
+                
+                <!-- Выбор модели -->
+                <div class="model-selector">
+                    <label><i class="fas fa-brain"></i> Модель:</label>
+                    <select id="model-select"></select>
+                </div>
+
+                <!-- Быстрые команды -->
+                <div class="quick-commands">
+                    <button class="btn btn-sm" onclick="quickCommand('Объясни что делает этот код')">
+                        <i class="fas fa-search"></i> Объяснить
+                    </button>
+                    <button class="btn btn-sm" onclick="quickCommand('Улучши этот код')">
+                        <i class="fas fa-sparkles"></i> Улучшить
+                    </button>
+                    <button class="btn btn-sm" onclick="quickCommand('Найди ошибки в коде')">
+                        <i class="fas fa-bug"></i> Найти баги
+                    </button>
+                </div>
+
+                <!-- Чат -->
+                <div class="chat-container" id="chat-messages"></div>
+
+                <!-- Индикатор загрузки -->
+                <div id="loading-indicator" class="loading-indicator" style="display: none;">
+                    <i class="fas fa-spinner fa-spin"></i> Генерация ответа...
+                </div>
+
+                <!-- Поле ввода -->
+                <div class="chat-input-container">
+                    <textarea id="chat-input" placeholder="Задайте вопрос или опишите задачу..."></textarea>
+                    <button class="btn btn-primary" onclick="sendMessage()">
+                        <i class="fas fa-paper-plane"></i> Отправить
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Модальное окно - Настройки -->
+    <div id="settings-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2><i class="fas fa-cog"></i> Настройки</h2>
+                <button class="btn btn-icon close-modal" onclick="closeSettings()">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label><i class="fas fa-key"></i> API Key (OpenRouter):</label>
+                    <input type="password" id="api-key-input" placeholder="sk-or-v1-...">
+                    <small>Получите ключ на <a href="https://openrouter.ai/keys" target="_blank">openrouter.ai/keys</a></small>
+                </div>
+                
+                <div class="form-group">
+                    <label><i class="fas fa-list"></i> Доступные модели:</label>
+                    <textarea id="models-input" rows="8"></textarea>
+                    <small>По одной модели на строку</small>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closeSettings()">Отмена</button>
+                <button class="btn btn-primary" onclick="saveSettings()">
+                    <i class="fas fa-save"></i> Сохранить
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Модальное окно - Код от AI -->
+    <div id="code-action-modal" class="modal">
+        <div class="modal-content modal-large">
+            <div class="modal-header">
+                <h2><i class="fas fa-code"></i> Код от AI</h2>
+                <button class="btn btn-icon close-modal" onclick="closeCodeAction()">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="modal-body">
+                <p class="code-preview-label">AI сгенерировал следующий код:</p>
+                <div id="code-preview" class="code-preview"></div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="codeAction('cancel')">
+                    <i class="fas fa-times"></i> Отмена
+                </button>
+                <button class="btn" onclick="codeAction('copy')">
+                    <i class="fas fa-copy"></i> Копировать
+                </button>
+                <button class="btn" onclick="codeAction('insert')">
+                    <i class="fas fa-plus"></i> Вставить в курсор
+                </button>
+                <button class="btn btn-success" onclick="codeAction('replace')">
+                    <i class="fas fa-check"></i> Заменить весь код
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Модальное окно - Новый файл -->
+    <div id="new-file-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2><i class="fas fa-file-plus"></i> Новый файл</h2>
+                <button class="btn btn-icon close-modal" onclick="closeNewFileDialog()">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label><i class="fas fa-file"></i> Имя файла:</label>
+                    <input type="text" id="new-file-name" placeholder="my_script.py"
+                           onkeydown="if(event.key==='Enter') confirmNewFile()">
+                </div>
+                <div class="form-group">
+                    <label><i class="fas fa-folder"></i> Директория (необязательно):</label>
+                    <input type="text" id="new-file-dir" placeholder="/path/to/folder или оставьте пустым"
+                           onkeydown="if(event.key==='Enter') confirmNewFile()">
+                    <small>Если оставить пустым — файл можно сохранить позже через Ctrl+Shift+S</small>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closeNewFileDialog()">Отмена</button>
+                <button class="btn btn-primary" onclick="confirmNewFile()">
+                    <i class="fas fa-plus"></i> Создать
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Модальное окно - Сохранить как -->
+    <div id="save-as-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2><i class="fas fa-save"></i> Сохранить как</h2>
+                <button class="btn btn-icon close-modal" onclick="closeSaveAsDialog()">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label><i class="fas fa-folder-open"></i> Полный путь к файлу:</label>
+                    <input type="text" id="save-as-path" placeholder="/home/user/projects/my_script.py"
+                           onkeydown="if(event.key==='Enter') confirmSaveAs()">
+                    <small>Введите полный путь включая имя файла и расширение</small>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closeSaveAsDialog()">Отмена</button>
+                <button class="btn btn-primary" onclick="confirmSaveAs()">
+                    <i class="fas fa-save"></i> Сохранить
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Диалог выбора папки (простой input для демонстрации) -->
+    <input type="file" id="directory-picker" webkitdirectory directory multiple style="display: none;" onchange="handleDirectorySelect(event)">
+    <input type="file" id="file-picker" style="display: none;" onchange="handleFileSelect(event)">
+
+    <!-- Monaco Editor -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.44.0/min/vs/loader.min.js"></script>
+    
+    <!-- Marked.js для парсинга markdown -->
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    
+    <!-- Main Script -->
+    <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+</body>
+</html>
